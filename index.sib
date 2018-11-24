@@ -1,3 +1,8 @@
+(var plugin-info
+     {description: "read kindle highlights"
+      kindle_url: "https://read.amazon.com/notebook"
+      default_output_filepath: "highlights.yml"})
+
 ;; read kindle highlights
 (def get-highlights-for-current-book (callback)
      (var exec-string "
@@ -48,20 +53,110 @@ function getBookHighlightData() {
 
 getBookHighlightData()
 ")
-     (|> (get_webview)
-         (execjs exec-string callback)))
+     (|> (getWebview)
+         (execJs exec-string callback)))
 
-(when false
-      ;; example: save highlights and notes to a file
-      (get-highlights-for-current-book
-       (#(js-out)
-         (console.log js-out)
-         (var output-filepath (+ "/tmp/" (get js-out "asin") ".yml"))
-         (console.info "outputting to" output-filepath)
-         (fs.writeFile
-          output-filepath
-          (|> js-out
-              (jsyaml.safeDump))
-          (#(err)
-            (when err
-                  (console.error "FAIL" err)))))))
+(def save-yaml-to-file! (data output-filepath)
+     (fs.writeFile
+      output-filepath
+      (jsyaml.safeDump data)
+      (#(err)
+        (when err
+              (console.error "FAIL" err)))))
+
+(def start-plugin! (control-element view-element)
+     (var output-filepath (m-prop (get plugin-info
+                                       "default_output_filepath"))
+          status-text (m-prop "")
+          current-data (m-prop null))
+
+     (m.mount
+      control-element
+      {view: (#> (m-miccup
+                  ["div"
+                   {style: {display: "flex"
+                            height: "100%"
+                            flexDirection: "column"
+                            fontSize: "8pt"
+                            fontFamily: "Consolas, Inconsolata, Monaco, Ubuntu, Monospace"
+                            }}
+                   ["span" "save to file:"]
+                   ["input"
+                    {type: "text"
+                     style: {width: "100%"}
+                     value: (output-filepath)
+                     onchange: (#(evt)
+                                 (output-filepath (get evt 'target 'value)))}]
+                   ["div"
+                    ["button"
+                     {onclick: (#> (get-highlights-for-current-book
+                                    (#(js-out)
+                                      (current-data js-out)
+                                      (var asin (get js-out "asin"))
+                                      (output-filepath
+                                       (+ asin ".yml"))
+                                      (status-text
+                                       (+ "loaded "
+                                          (get js-out "highlights" "length")
+                                          " highlights from "
+                                          (get js-out "title")
+                                          " (" asin ")"))
+                                      (m.redraw))))}
+                     "load highlights"]
+                    ["button"
+                     {onclick: (#>
+                                (console.debug "save to file:" (output-filepath))
+                                (var filepath (output-filepath)
+                                     cur-data (current-data))
+                                (when (= filepath.length 0)
+                                      (assign filepath
+                                              (get plugin-info
+                                                   "default_output_filepath")))
+                                (var show-message!
+                                     (#(data)
+                                       (status-text
+                                        (+ "saved "
+                                           (get data "highlights" "length")
+                                           " highlights to "
+                                           (output-filepath)))
+                                       (m.redraw))
+                                     
+                                     do-save!
+                                     (if (not cur-data)
+                                         (#> (get-highlights-for-current-book
+                                              (#(data)
+                                                (save-yaml-to-file!
+                                                 data filepath)
+                                                (show-message! data))))
+                                         (#> (save-yaml-to-file!
+                                              cur-data filepath)
+                                             (show-message! cur-data))))
+                                (do-save!))}
+                     "save notes file"]]
+                   ["textarea"
+                    {style: {width: "100%"
+                             boxSizing: "border-box"
+                             flex: 1}}
+                    (when (current-data)
+                          (|> (current-data)
+                              (JSON.stringify null 2)))]
+                   ["div"
+                    {style: {color: "brown"}}
+                    (status-text)]]))})
+     
+     (m.mount
+      view-element
+      {oncreate: (#(vnode)
+                   (var dom-node (get vnode "dom"))
+                   ;; important -- needed for JS interaction
+                   (dom-node.addEventListener
+                    "did-finish-load"
+                    (#> (Hyperbloviate.bindWebviewInterop dom-node))))
+       view: (#> (m-miccup ["webview"
+                            {src: (get plugin-info "kindle_url")
+                             allowRunningInsecureContent: true
+                             preload: "webview_preload.js"}]))}))
+
+(set exports
+     'info plugin-info
+     'start start-plugin!)
