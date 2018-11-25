@@ -1,7 +1,13 @@
 (var plugin-info
      {description: "read kindle highlights"
       kindle_url: "https://read.amazon.com/notebook"
-      default_output_filepath: "highlights.yml"})
+      default_output_directory: "kindle" 
+      default_output_filename: "highlights.yml"})
+
+(def ensure-file-dir! (filepath)
+     (var file-dir (path.dirname filepath))
+     (when (not (fs.existsSync file-dir))
+           (fs.mkdirSync file-dir)))
 
 ;; read kindle highlights
 (def get-highlights-for-current-book (callback)
@@ -57,6 +63,7 @@ getBookHighlightData()
          (execJs exec-string callback)))
 
 (def save-yaml-to-file! (data output-filepath)
+     (ensure-file-dir! output-filepath)
      (fs.writeFile
       output-filepath
       (jsyaml.safeDump data)
@@ -64,9 +71,15 @@ getBookHighlightData()
         (when err
               (console.error "FAIL" err)))))
 
+(def get-default-output-filepath ()
+     (path.join
+      (get plugin-info
+           "default_output_directory")
+      (get plugin-info
+           "default_output_filename")))
+
 (def start-plugin! (control-element view-element)
-     (var output-filepath (m-prop (get plugin-info
-                                       "default_output_filepath"))
+     (var output-filepath (m-prop (get-default-output-filepath))
           status-text (m-prop "")
           current-data (m-prop null))
 
@@ -94,7 +107,10 @@ getBookHighlightData()
                                       (current-data js-out)
                                       (var asin (get js-out "asin"))
                                       (output-filepath
-                                       (+ asin ".yml"))
+                                       (path.join
+                                        (get plugin-info
+                                             "default_output_directory")
+                                        (+ asin ".yml")))
                                       (status-text
                                        (+ "loaded "
                                           (get js-out "highlights" "length")
@@ -110,8 +126,7 @@ getBookHighlightData()
                                      cur-data (current-data))
                                 (when (= filepath.length 0)
                                       (assign filepath
-                                              (get plugin-info
-                                                   "default_output_filepath")))
+                                              (get-default-output-filepath)))
                                 (var show-message!
                                      (#(data)
                                        (status-text
