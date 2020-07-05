@@ -4,6 +4,28 @@
       default_output_directory: "kindle" 
       default_output_filename: "highlights.yml"})
 
+(var fs (require 'fs)
+     path (require 'path)
+     sibilant (require "sibilant")
+     m (require "mithril")
+     m-prop (require "mithril/stream"))
+
+(when (= (typeof m-miccup) "undefined")
+      (var m-miccup (get
+                     (require
+                      (path.join
+                       __dirname
+                       ".."
+                       "src/wksymsib/src/miccup.js"))
+                     'm-miccup)))
+
+(var kindle-highlights-current-book-exec-string
+     (|> (path.join
+          __dirname
+          ".."
+          "plugin/hyperbloviate-kindle-highlights/kindle-interop.js")
+         (fs.readFileSync "utf-8")))
+
 (def ensure-file-dir! (filepath)
      (var file-dir (path.dirname filepath))
      (when (not (fs.existsSync file-dir))
@@ -11,56 +33,10 @@
 
 ;; read kindle highlights
 (def get-highlights-for-current-book (callback)
-     (var exec-string "
-function getTitleAsinMapping() {
-  var bookDivs = document.querySelectorAll(\"div#library div.a-row.kp-notebook-library-each-book\");
-  var mapping = {};
-  for(var i=0;i<bookDivs.length;++i) {
-    var asin = bookDivs[i].getAttribute(\"id\");
-    var title = bookDivs[i].querySelector(\"h2\").innerText;
-    mapping[title] = asin;
-  }
-  return mapping;
-}
-
-function getBookTitle() {
-  return document.querySelector(\"div#annotations h3.a-spacing-top-small.a-color-base.kp-notebook-selectable.kp-notebook-metadata\").innerText;
-}
-
-function getAllHighlightDivs() {
-  return document.querySelectorAll(\"div#kp-notebook-annotations div.a-row.a-spacing-base\");
-}
-
-function parseHighlightDiv(div) {
-  var highlightColorPageNumber = div.querySelector(\"span.a-size-small.a-color-secondary.kp-notebook-selectable\").innerText;
-  var hcpnSplit = highlightColorPageNumber.split(/\\s+/)
-  return {
-    highlightText: div.querySelector(\"span.a-size-base-plus.a-color-base\").innerText,
-    noteText: div.querySelector(\"span#note.a-size-base-plus.a-color-base\").innerText,
-    highlightColor: hcpnSplit[0],
-    pageNumber: parseInt(hcpnSplit[4].replace(\",\", \"\"))
-  }
-}
-
-function getBookHighlightData() {
-  var highlightDivs = getAllHighlightDivs();
-  var highlights = [];
-  for(var i=0; i<highlightDivs.length; ++i) {
-    highlights.push(parseHighlightDiv(highlightDivs[i]));
-  }
-  var title = getBookTitle();
-  var titleAsinMapping = getTitleAsinMapping();
-  return {
-    title: title,
-    asin: titleAsinMapping[title],
-    highlights: highlights
-  }
-}
-
-getBookHighlightData()
-")
      (|> (getWebview)
-         (execJs exec-string callback)))
+         (execJs
+          kindle-highlights-current-book-exec-string
+          callback)))
 
 (def save-yaml-to-file! (data output-filepath)
      (ensure-file-dir! output-filepath)
